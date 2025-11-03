@@ -24,7 +24,6 @@ resource "aws_internet_gateway" "igw" {
   tags   = { Name = "${local.name_prefix}-igw" }
 }
 
-# Public subnets
 resource "aws_subnet" "public" {
   for_each = zipmap(range(length(var.public_subnet_cidrs)), var.public_subnet_cidrs)
   vpc_id            = aws_vpc.this.id
@@ -34,7 +33,6 @@ resource "aws_subnet" "public" {
   tags = { Name = "${local.name_prefix}-public-${each.key}" }
 }
 
-# Private subnets
 resource "aws_subnet" "private" {
   for_each = zipmap(range(length(var.private_subnet_cidrs)), var.private_subnet_cidrs)
   vpc_id            = aws_vpc.this.id
@@ -44,7 +42,6 @@ resource "aws_subnet" "private" {
   tags = { Name = "${local.name_prefix}-private-${each.key}" }
 }
 
-# Public route table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
   tags   = { Name = "${local.name_prefix}-public-rt" }
@@ -62,10 +59,9 @@ resource "aws_route_table_association" "public_assoc" {
   route_table_id = aws_route_table.public.id
 }
 
-# NAT Gateway + EIP
 resource "aws_eip" "nat" {
   domain = "vpc"
-  tags = { Name = "${local.name_prefix}-nat-eip" }
+  tags   = { Name = "${local.name_prefix}-nat-eip" }
 }
 
 resource "aws_nat_gateway" "nat" {
@@ -75,7 +71,6 @@ resource "aws_nat_gateway" "nat" {
   depends_on    = [aws_internet_gateway.igw]
 }
 
-# Private route table with NAT
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
   tags   = { Name = "${local.name_prefix}-private-rt" }
@@ -121,7 +116,7 @@ resource "aws_security_group" "alb_sg" {
 resource "aws_security_group" "ecs_sg" {
   name        = "${local.name_prefix}-ecs-sg"
   vpc_id      = aws_vpc.this.id
-  description = "Allow inbound from ALB and outbound to RDS" # <- keep old description
+  description = "Allow inbound from ALB and outbound to RDS"
 
   ingress {
     from_port       = 80
@@ -138,12 +133,11 @@ resource "aws_security_group" "ecs_sg" {
   }
 
   ingress {
-  from_port       = 3000
-  to_port         = 3000
-  protocol        = "tcp"
-  security_groups = [aws_security_group.alb_sg.id]
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
   }
-
 
   egress {
     from_port   = 0
@@ -153,9 +147,29 @@ resource "aws_security_group" "ecs_sg" {
   }
 
   tags = { Name = "${local.name_prefix}-ecs-sg" }
+}
 
-  # remove prevent_destroy for now
-  # lifecycle { prevent_destroy = true }
+# New security group for Prometheus
+resource "aws_security_group" "prometheus_sg" {
+  name        = "${local.name_prefix}-prometheus-sg"
+  vpc_id      = aws_vpc.this.id
+  description = "Allow Grafana/ECS access to Prometheus"
+
+  ingress {
+    from_port       = 9090
+    to_port         = 9090
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${local.name_prefix}-prometheus-sg" }
 }
 
 resource "aws_security_group" "rds_sg" {
@@ -167,7 +181,7 @@ resource "aws_security_group" "rds_sg" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_sg.id]  # keep reference to ECS SG
+    security_groups = [aws_security_group.ecs_sg.id]
   }
 
   egress {
@@ -179,7 +193,6 @@ resource "aws_security_group" "rds_sg" {
 
   tags = { Name = "${local.name_prefix}-rds-sg" }
 }
-
 
 # -----------------------
 # ECR
@@ -277,12 +290,13 @@ resource "aws_lb_target_group" "grafana" {
   target_type = "ip"
 
   health_check {
-    path                = "/"
+    path                = "/login"
     interval            = 30
     unhealthy_threshold = 2
     healthy_threshold   = 2
     matcher             = "200"
     timeout             = 5
+    protocol            = "HTTP"
   }
 
   tags = { Name = "${local.name_prefix}-tg-grafana" }
@@ -291,7 +305,6 @@ resource "aws_lb_target_group" "grafana" {
     create_before_destroy = true
   }
 }
-
 
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.alb.arn
@@ -323,7 +336,6 @@ resource "aws_lb_listener_rule" "grafana_rule" {
     }
   }
 }
-
 
 # -----------------------
 # CloudWatch Logs
@@ -435,14 +447,10 @@ resource "aws_ecs_task_definition" "prometheus" {
   family                   = "${local.name_prefix}-prometheus"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_exec_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
-
-  volume {
-    name = "prometheus-config"
-  }
 
   container_definitions = jsonencode([
     {
@@ -450,13 +458,6 @@ resource "aws_ecs_task_definition" "prometheus" {
       image     = "prom/prometheus:latest"
       essential = true
       portMappings = [{ containerPort = 9090, protocol = "tcp" }]
-      mountPoints = [
-        {
-          sourceVolume  = "prometheus-config"
-          containerPath = "/etc/prometheus/"
-          readOnly      = true
-        }
-      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -478,7 +479,7 @@ resource "aws_ecs_service" "prometheus" {
 
   network_configuration {
     subnets          = [for s in aws_subnet.private : s.id]
-    security_groups  = [aws_security_group.ecs_sg.id]
+    security_groups  = [aws_security_group.prometheus_sg.id]  # <- fixed
     assign_public_ip = false
   }
 }
@@ -527,10 +528,10 @@ resource "aws_ecs_service" "grafana" {
   }
 
   load_balancer {
-  target_group_arn = aws_lb_target_group.grafana.arn
-  container_name   = "grafana"
-  container_port   = 3000
-}
+    target_group_arn = aws_lb_target_group.grafana.arn
+    container_name   = "grafana"
+    container_port   = 3000
+  }
 }
 
 # -----------------------
