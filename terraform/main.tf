@@ -228,16 +228,26 @@ resource "aws_lb" "alb" {
 }
 
 resource "aws_lb_target_group" "tg" {
-  name     = "${local.name_prefix}-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.this.id
+  name        = "${local.name_prefix}-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.this.id
+  target_type = "ip"
 
   health_check {
     path                = "/"
     interval            = 30
     unhealthy_threshold = 2
     healthy_threshold   = 2
+    matcher             = "200"
+    timeout             = 5
+  }
+
+  tags = { Name = "${local.name_prefix}-tg" }
+
+  # Create replacement target group before destroying old one (safe replace)
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -250,6 +260,11 @@ resource "aws_lb_listener" "http" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.tg.arn
   }
+
+  # Ensure listener is created after the TG (so on destroy listener is removed first)
+  depends_on = [
+    aws_lb_target_group.tg
+  ]
 }
 
 # -----------------------
@@ -278,7 +293,7 @@ resource "aws_ecs_task_definition" "app" {
       name      = "frontend"
       image     = var.frontend_image_uri
       essential = true
-      portMappings = [{ containerPort = 80, hostPort = 80 }]
+      portMappings = [{ containerPort = 80, protocol = "tcp" }]
       environment = [
         { name = "API_BASE", value = "http://backend:5000" }
       ]
@@ -295,7 +310,7 @@ resource "aws_ecs_task_definition" "app" {
       name      = "backend"
       image     = var.backend_image_uri
       essential = true
-      portMappings = [{ containerPort = 5000, hostPort = 5000 }]
+      portMappings = [{ containerPort = 5000, protocol = "tcp" }]
       environment = [
         { name = "DB_HOST",     value = aws_db_instance.main.address },
         { name = "DB_NAME",     value = var.db_name },
