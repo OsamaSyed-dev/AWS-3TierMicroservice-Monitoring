@@ -1,0 +1,80 @@
+name: Build → Push → Deploy (ECR → ECS)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+env:
+  FRONTEND_REPO: employee-frontend
+  BACKEND_REPO: employee-backend
+  IMAGE_TAG: latest
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_image: ${{ steps.frontend-out.outputs.image }}
+      backend_image:  ${{ steps.backend-out.outputs.image }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # ---------------- Frontend build & push ----------------
+      - name: Build & push frontend image
+        id: frontend-out
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+          outputs: type=registry,ref=$.image
+
+      # ---------------- Backend build & push ----------------
+      - name: Build & push backend image
+        id: backend-out
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.BACKEND_REPO }}:${{ env.IMAGE_TAG }}
+          outputs: type=registry,ref=$.image
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build_and_push
+    steps:
+      - name: Configure AWS credentials (deploy)
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update ECS service (force new deployment)
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          CLUSTER_NAME: ${{ secrets.AWS_ECS_CLUSTER }}        # e.g. employee-mgmt-cluster
+          SERVICE_NAME: ${{ secrets.AWS_ECS_SERVICE }}        # e.g. employee-mgmt-service
+        run: |
+          echo "Forcing new deployment of ECS service..."
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
+            --force-new-deployment
+          echo "Update requested. ECS will start new tasks pulling latest images."
