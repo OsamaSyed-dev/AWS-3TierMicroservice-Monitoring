@@ -149,28 +149,6 @@ resource "aws_security_group" "ecs_sg" {
   tags = { Name = "${local.name_prefix}-ecs-sg" }
 }
 
-# New security group for Prometheus
-resource "aws_security_group" "prometheus_sg" {
-  name        = "${local.name_prefix}-prometheus-sg"
-  vpc_id      = aws_vpc.this.id
-  description = "Allow Grafana/ECS access to Prometheus"
-
-  ingress {
-    from_port       = 9090
-    to_port         = 9090
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name_prefix}-prometheus-sg" }
-}
 
 resource "aws_security_group" "rds_sg" {
   name        = "${local.name_prefix}-rds-sg"
@@ -282,29 +260,6 @@ resource "aws_lb_target_group" "tg" {
   }
 }
 
-resource "aws_lb_target_group" "grafana" {
-  name        = "${local.name_prefix}-tg-grafana"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.this.id
-  target_type = "ip"
-
-  health_check {
-    path                = "/login"
-    interval            = 30
-    unhealthy_threshold = 2
-    healthy_threshold   = 2
-    matcher             = "200"
-    timeout             = 5
-    protocol            = "HTTP"
-  }
-
-  tags = { Name = "${local.name_prefix}-tg-grafana" }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
 
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.alb.arn
@@ -321,21 +276,6 @@ resource "aws_lb_listener" "http" {
   ]
 }
 
-resource "aws_lb_listener_rule" "grafana_rule" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.grafana.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/grafana/*"]
-    }
-  }
-}
 
 # -----------------------
 # CloudWatch Logs
@@ -479,58 +419,8 @@ resource "aws_ecs_service" "prometheus" {
 
   network_configuration {
     subnets          = [for s in aws_subnet.private : s.id]
-    security_groups  = [aws_security_group.prometheus_sg.id]  # <- fixed
+    security_groups  = [aws_security_group.ecs_sg.id]  # <- fixed
     assign_public_ip = false
-  }
-}
-
-# -----------------------
-# ECS Task Definition & Service for Grafana
-# -----------------------
-resource "aws_ecs_task_definition" "grafana" {
-  family                   = "${local.name_prefix}-grafana"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
-  execution_role_arn       = aws_iam_role.ecs_task_exec_role.arn
-  task_role_arn            = aws_iam_role.ecs_task_role.arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "grafana"
-      image     = "grafana/grafana:latest"
-      essential = true
-      portMappings = [{ containerPort = 3000, protocol = "tcp" }]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = "/ecs/${local.name_prefix}"
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "grafana"
-        }
-      }
-    }
-  ])
-}
-
-resource "aws_ecs_service" "grafana" {
-  name            = "${local.name_prefix}-grafana"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.grafana.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = [for s in aws_subnet.private : s.id]
-    security_groups  = [aws_security_group.ecs_sg.id]
-    assign_public_ip = false
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.grafana.arn
-    container_name   = "grafana"
-    container_port   = 3000
   }
 }
 
