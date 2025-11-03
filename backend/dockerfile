@@ -1,0 +1,20 @@
+# Backend Dockerfile
+FROM node:18-alpine
+
+# Set working directory inside container
+WORKDIR /app
+
+# Copy package.json first (for caching)
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the entire backend folder content
+COPY . .
+
+# Expose the backend port
+EXPOSE 5000
+
+# Start the backend server (note the path)
+CMD ["node", "src/server.js"]
