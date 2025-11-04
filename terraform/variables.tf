@@ -94,3 +94,14 @@ variable "db_name" {
   type        = string
   default     = "employeesdb"
 }
+
+variable "grafana_api_user" {
+  type        = string
+  description = "Grafana Cloud API User"
+}
+
+variable "grafana_api_key" {
+  type        = string
+  description = "Grafana Cloud API Key"
+  sensitive   = true
+}

@@ -398,6 +398,10 @@ resource "aws_ecs_task_definition" "prometheus" {
       image     = "prom/prometheus:latest"
       essential = true
       portMappings = [{ containerPort = 9090, protocol = "tcp" }]
+      environment = [
+        { name = "GRAFANA_API_USER", value = var.grafana_api_user },
+        { name = "GRAFANA_API_KEY",  value = var.grafana_api_key }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
