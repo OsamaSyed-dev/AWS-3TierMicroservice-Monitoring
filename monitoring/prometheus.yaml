@@ -3,7 +3,7 @@ global:
   evaluation_interval: 15s
 
 remote_write:
-  - url: https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom
+  - url: https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push
     basic_auth:
       username: "${GRAFANA_API_USER}"
       password: "${GRAFANA_API_KEY}"
