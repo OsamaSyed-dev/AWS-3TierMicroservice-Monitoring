@@ -109,6 +109,6 @@ variable "grafana_api_key" {
 variable "prometheus_image_uri" {
   description = "ECR image URI for the custom Prometheus image (including tag)"
   type        = string
-  default     = "prom/prometheus:latest"
+  default     = "public.ecr.aws/prometheus/prometheus:v2.52.0"
 }
 
