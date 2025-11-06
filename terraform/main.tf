@@ -349,7 +349,7 @@ resource "aws_ecs_task_definition" "app" {
     },
     {
       name      = "nginx-exporter"
-      image     = "nginx/nginx-prometheus-exporter:latest"
+      image     = "public.ecr.aws/nginx/nginx-prometheus-exporter:latest"
       essential = true
       portMappings = [{ containerPort = 9113, protocol = "tcp" }]
       environment = [
