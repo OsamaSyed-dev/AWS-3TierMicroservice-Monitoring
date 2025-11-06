@@ -1,11 +1,12 @@
 FROM prom/prometheus:latest
 
-# Install envsubst utility
 USER root
-RUN apk add --no-cache gettext
+
+# Install envsubst (gettext-base provides it on Debian/Ubuntu)
+RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
 
 # Copy Prometheus config
 COPY prometheus.yaml /etc/prometheus/prometheus.yaml
 
-# Use envsubst to replace variables before starting Prometheus
-CMD /bin/sh -c "envsubst < /etc/prometheus/prometheus.yaml > /tmp/prometheus.yaml && exec prometheus --config.file=/tmp/prometheus.yaml --web.enable-lifecycle --storage.tsdb.path=/prometheus"
+# Replace env vars and start Prometheus
+CMD ["/bin/sh", "-c", "envsubst < /etc/prometheus/prometheus.yaml > /tmp/prometheus.yaml && exec prometheus --config.file=/tmp/prometheus.yaml --web.enable-lifecycle --storage.tsdb.path=/prometheus"]
