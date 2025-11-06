@@ -420,6 +420,13 @@ resource "aws_ecs_task_definition" "prometheus" {
           awslogs-stream-prefix = "prometheus"
         }
       }
+       # Explicitly force Prometheus to use the correct config
+      command = [
+        "--config.file=/etc/prometheus/prometheus.yaml",
+        "--storage.tsdb.path=/prometheus",
+        "--web.enable-lifecycle",
+        "--web.console.templates=/usr/share/prometheus/consoles",
+        "--web.console.libraries=/usr/share/prometheus/console_libraries",]
     }
   ])
 }
