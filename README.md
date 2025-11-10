@@ -16,10 +16,6 @@ This repository demonstrates a **microservices application** (frontend and backe
 5. [Monitoring & Observability](#monitoring--observability)
 6. [Screenshots](#screenshots)
 7. [Troubleshooting](#troubleshooting)
-8. [Contributing](#contributing)
-9. [Changelog & Releases](#changelog--releases)
-10. [License](#license)
-
 ---
 
 ## Architecture
@@ -29,7 +25,7 @@ This repository demonstrates a **microservices application** (frontend and backe
 
 
 ### High-Level Flow
-1. Git push to `main/master` triggers GitHub Actions pipeline.
+1. Git push to `master` triggers GitHub Actions pipeline.
 2. Pipeline builds Docker images for frontend, backend, and Prometheus, then pushes them to **ECR**.
 3. Terraform deploys/updates AWS infrastructure:  
    `VPC → Subnets → ALB → ECS Cluster & Services → RDS`.
@@ -41,7 +37,7 @@ This repository demonstrates a **microservices application** (frontend and backe
 To reproduce or inspect the project:
 
 - **Terraform files:** `terraform/`
-- **CI pipeline:** `.github/workflows/pipeline.yaml`
+- **CI/CD pipeline:** `.github/workflows/pipeline.yaml`
 - **Dockerfiles:** `frontend/Dockerfile`, `backend/Dockerfile`
 
 **Important runtime environment variables (GitHub Secrets for Actions):**  
